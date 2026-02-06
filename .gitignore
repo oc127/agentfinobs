@@ -1,0 +1,25 @@
+# Environment and secrets
+config/.env
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Logs and data
+logs/*.log
+data/*.json
+bot.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
