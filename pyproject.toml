@@ -46,6 +46,9 @@ dev = [
     "ruff>=0.4.0",
 ]
 
+[project.scripts]
+agentfinobs = "agentfinobs.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/agentfinobs/agentfinobs"
 Documentation = "https://github.com/agentfinobs/agentfinobs#readme"
@@ -54,6 +57,9 @@ Issues = "https://github.com/agentfinobs/agentfinobs/issues"
 
 [tool.setuptools.packages.find]
 include = ["agentfinobs*"]
+
+[tool.setuptools.package-data]
+agentfinobs = ["py.typed"]
 
 [tool.ruff]
 target-version = "py310"
