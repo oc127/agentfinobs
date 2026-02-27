@@ -13,9 +13,12 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 
 from .types import AgentTx, TxStatus
+
+if TYPE_CHECKING:
+    from .exporters import BaseExporter
 
 logger = logging.getLogger("agentfinobs.tracker")
 
@@ -34,6 +37,18 @@ class SpendTracker:
                             description="Buy YES tokens")
         # ... later, when outcome is known ...
         tracker.settle(tx.tx_id, revenue=13.00)
+
+    With exporters::
+
+        from agentfinobs.exporters import JsonlExporter, WebhookExporter
+
+        tracker = SpendTracker(
+            agent_id="my-agent",
+            exporters=[
+                JsonlExporter("data/txs.jsonl"),
+                WebhookExporter("https://my-saas.com/ingest"),
+            ],
+        )
     """
 
     def __init__(
@@ -41,12 +56,14 @@ class SpendTracker:
         agent_id: str = "default",
         persist_dir: str | Path | None = None,
         max_history: int = 10_000,
+        exporters: list["BaseExporter"] | None = None,
     ):
         self.agent_id = agent_id
         self._txs: dict[str, AgentTx] = {}  # tx_id -> AgentTx
         self._ordered_ids: list[str] = []    # insertion order
         self._lock = threading.Lock()
         self._listeners: list[TxListener] = []
+        self._exporters: list["BaseExporter"] = list(exporters or [])
         self._max_history = max_history
 
         self._persist_path: Path | None = None
@@ -72,6 +89,8 @@ class SpendTracker:
 
         if self._persist_path:
             self._append_to_disk(tx)
+
+        self._export(tx)
 
         # Notify listeners (budget checks, anomaly detection, etc.)
         for listener in self._listeners:
@@ -102,6 +121,8 @@ class SpendTracker:
 
         if self._persist_path:
             self._append_to_disk(tx)
+
+        self._export(tx)
 
         logger.debug(
             f"[SETTLE] {tx.tx_id} revenue=${revenue:.4f} "
@@ -147,10 +168,21 @@ class SpendTracker:
         with self._lock:
             return len(self._txs)
 
-    # ── Listeners ──────────────────────────────────────────────────────
+    # ── Listeners & Exporters ─────────────────────────────────────────
 
     def add_listener(self, fn: TxListener):
         self._listeners.append(fn)
+
+    def add_exporter(self, exporter: "BaseExporter"):
+        self._exporters.append(exporter)
+
+    def _export(self, tx: AgentTx):
+        """Push tx to all registered exporters."""
+        for exp in self._exporters:
+            try:
+                exp.export_tx(tx)
+            except Exception as e:
+                logger.warning(f"Exporter {exp.__class__.__name__} error: {e}")
 
     # ── Persistence ────────────────────────────────────────────────────
 

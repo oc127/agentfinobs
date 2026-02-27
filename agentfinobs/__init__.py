@@ -47,6 +47,13 @@ from .budget import BudgetManager
 from .metrics import MetricsEngine, Snapshot
 from .anomaly import AnomalyDetector
 from .dashboard import Dashboard
+from .exporters import (
+    BaseExporter,
+    JsonlExporter,
+    WebhookExporter,
+    ConsoleExporter,
+    MultiExporter,
+)
 
 
 class ObservabilityStack:
@@ -78,11 +85,18 @@ class ObservabilityStack:
         persist_dir: str | None = None,
         dashboard_port: int | None = None,
         anomaly_z_threshold: float = 3.0,
+        exporters: list[BaseExporter] | None = None,
     ) -> "ObservabilityStack":
         """
         Factory that creates and wires the full stack in one call.
+
+        Args:
+            exporters: Optional list of exporters (JsonlExporter, WebhookExporter, etc.)
+                       These receive every tx in real-time for shipping to external systems.
         """
-        tracker = SpendTracker(agent_id=agent_id, persist_dir=persist_dir)
+        tracker = SpendTracker(
+            agent_id=agent_id, persist_dir=persist_dir, exporters=exporters,
+        )
         budget = BudgetManager()
         metrics = MetricsEngine(budget_total=total_budget)
         anomaly = AnomalyDetector(z_threshold=anomaly_z_threshold)
@@ -154,6 +168,12 @@ __all__ = [
     "BudgetRule",
     "PaymentRail",
     "TxStatus",
+    # Exporters
+    "BaseExporter",
+    "JsonlExporter",
+    "WebhookExporter",
+    "ConsoleExporter",
+    "MultiExporter",
 ]
 
 __version__ = "0.1.0"

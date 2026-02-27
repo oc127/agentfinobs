@@ -283,6 +283,139 @@ class TestObservabilityStack(unittest.TestCase):
         self.assertIn("x402_usdc", snap.spend_by_rail)
 
 
+class TestExporters(unittest.TestCase):
+    def test_jsonl_exporter(self):
+        import tempfile
+        import os
+        import json
+
+        from agentfinobs import JsonlExporter
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.jsonl")
+            exporter = JsonlExporter(path)
+
+            tx = AgentTx(amount=42.0, agent_id="exp-test", task_id="t1")
+            exporter.export_tx(tx)
+            exporter.export_tx(AgentTx(amount=7.0))
+
+            with open(path) as f:
+                lines = f.readlines()
+            self.assertEqual(len(lines), 2)
+            first = json.loads(lines[0])
+            self.assertAlmostEqual(first["amount"], 42.0)
+
+    def test_console_exporter(self):
+        import io
+        import contextlib
+
+        from agentfinobs import ConsoleExporter
+
+        exporter = ConsoleExporter(color=False)
+        tx = AgentTx(amount=5.0, counterparty="openai", description="GPT call")
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exporter.export_tx(tx)
+
+        output = buf.getvalue()
+        self.assertIn("$5.0000", output)
+        self.assertIn("openai", output)
+
+    def test_multi_exporter(self):
+        from agentfinobs import MultiExporter, BaseExporter
+
+        received_a = []
+        received_b = []
+
+        class FakeA(BaseExporter):
+            def export_tx(self, tx):
+                received_a.append(tx)
+
+        class FakeB(BaseExporter):
+            def export_tx(self, tx):
+                received_b.append(tx)
+
+        multi = MultiExporter([FakeA(), FakeB()])
+        tx = AgentTx(amount=1.0)
+        multi.export_tx(tx)
+
+        self.assertEqual(len(received_a), 1)
+        self.assertEqual(len(received_b), 1)
+
+    def test_multi_exporter_isolates_errors(self):
+        from agentfinobs import MultiExporter, BaseExporter
+
+        received = []
+
+        class BadExporter(BaseExporter):
+            def export_tx(self, tx):
+                raise RuntimeError("boom")
+
+        class GoodExporter(BaseExporter):
+            def export_tx(self, tx):
+                received.append(tx)
+
+        multi = MultiExporter([BadExporter(), GoodExporter()])
+        tx = AgentTx(amount=1.0)
+        multi.export_tx(tx)  # should not raise
+
+        self.assertEqual(len(received), 1)
+
+    def test_tracker_with_exporter(self):
+        from agentfinobs import BaseExporter
+
+        exported = []
+
+        class CapturingExporter(BaseExporter):
+            def export_tx(self, tx):
+                exported.append(tx)
+
+        tracker = SpendTracker(agent_id="test", exporters=[CapturingExporter()])
+        tracker.record(amount=10.0, task_id="t1")
+        tracker.record(amount=20.0, task_id="t2")
+
+        # 2 records = 2 exports
+        self.assertEqual(len(exported), 2)
+        self.assertAlmostEqual(exported[0].amount, 10.0)
+
+    def test_tracker_settle_exports(self):
+        from agentfinobs import BaseExporter
+
+        exported = []
+
+        class CapturingExporter(BaseExporter):
+            def export_tx(self, tx):
+                exported.append(tx)
+
+        tracker = SpendTracker(agent_id="test", exporters=[CapturingExporter()])
+        tx = tracker.record(amount=5.0)
+        tracker.settle(tx.tx_id, revenue=8.0)
+
+        # 1 record + 1 settle = 2 exports
+        self.assertEqual(len(exported), 2)
+        # Second export should have the settled state
+        self.assertAlmostEqual(exported[1].revenue, 8.0)
+
+    def test_stack_with_exporters(self):
+        from agentfinobs import BaseExporter
+
+        exported = []
+
+        class CapturingExporter(BaseExporter):
+            def export_tx(self, tx):
+                exported.append(tx)
+
+        obs = ObservabilityStack.create(
+            agent_id="exp-stack-test",
+            exporters=[CapturingExporter()],
+        )
+        obs.track(amount=1.0)
+        obs.track(amount=2.0)
+
+        self.assertEqual(len(exported), 2)
+
+
 class TestAgentTx(unittest.TestCase):
     def test_pnl_and_roi(self):
         tx = AgentTx(amount=10.0, revenue=15.0)
