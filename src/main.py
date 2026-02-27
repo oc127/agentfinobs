@@ -48,6 +48,9 @@ from .trading import (
 from .cex_price_feed import BinancePriceFeed, MomentumSignal
 from .risk_manager import RiskManager, TradeRecord, TelegramNotifier
 
+# Agent Financial Observability
+from agentfinobs import ObservabilityStack, PaymentRail
+
 # ── Logging ──────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -89,6 +92,21 @@ class PolymarketArbBot:
             bot_token=settings.telegram_bot_token,
             chat_id=settings.telegram_chat_id,
             enabled=settings.telegram_enabled,
+        )
+
+        # Agent Financial Observability
+        self.obs = ObservabilityStack.create(
+            agent_id="polymarket-arb-bot",
+            budget_rules=[
+                {"name": "hourly", "max_amount": settings.max_single_bet * 5,
+                 "window_seconds": 3600, "severity": "warning"},
+                {"name": "daily", "max_amount": settings.max_position_size,
+                 "window_seconds": 86400, "severity": "critical",
+                 "halt_on_breach": True},
+            ],
+            total_budget=settings.sim_balance if settings.dry_run else settings.max_position_size,
+            persist_dir=str(Path(__file__).resolve().parent.parent / "data" / "obs"),
+            dashboard_port=9400,
         )
 
         # Current market state
@@ -317,6 +335,18 @@ class PolymarketArbBot:
             self.risk_manager.record_settlement(trade, won=True, pnl=opp["expected_profit"])
             self.trades_executed += 1
             self.pure_arb_opportunities += 1
+
+            # Observability: track + settle
+            otx = self.obs.track(
+                amount=opp["total_investment"],
+                task_id=f"pure_arb:{self.market_slug}",
+                rail=PaymentRail.POLYMARKET_CLOB,
+                counterparty="polymarket",
+                description=f"Pure arb BOTH {opp['order_size']:.0f}sh @${opp['total_cost']:.4f}",
+                tags={"strategy": "pure_arb", "market": self.market_slug or ""},
+            )
+            self.obs.settle(otx.tx_id, revenue=opp["expected_payout"])
+
             logger.info(f"[SIM] Balance: ${self.sim_balance:.2f} (+${opp['expected_profit']:.2f})")
             asyncio.ensure_future(self.notifier.notify_trade(trade))
             return
@@ -422,8 +452,18 @@ class PolymarketArbBot:
             self.trades_executed += 1
             self.temporal_arb_opportunities += 1
 
-            # Simulate win based on confidence
-            # (In reality, settlement happens when the 15-min window closes)
+            # Observability: track (settlement happens when 15-min window closes)
+            self.obs.track(
+                amount=opp["total_investment"],
+                task_id=f"temporal_arb:{self.market_slug}",
+                rail=PaymentRail.POLYMARKET_CLOB,
+                counterparty="polymarket",
+                description=f"Temporal arb BUY {opp['direction']} {opp['order_size']:.0f}sh @${opp['price']:.4f}",
+                tags={"strategy": "temporal_arb", "direction": opp["direction"],
+                      "market": self.market_slug or "",
+                      "confidence": f"{opp['confidence']:.2f}"},
+            )
+
             logger.info(f"[SIM] Balance: ${self.sim_balance:.2f} (awaiting settlement)")
             asyncio.ensure_future(self.notifier.notify_trade(trade))
             return
@@ -587,6 +627,16 @@ class PolymarketArbBot:
             logger.info(f"[SIM] PnL:           ${pnl:+.2f}")
         risk_summary = self.risk_manager.get_summary()
         logger.info(f"Daily PnL:           ${risk_summary['daily_pnl']:+.2f}")
+
+        # Observability metrics
+        snap = self.obs.snapshot()
+        if snap.tx_count > 0:
+            logger.info(f"[OBS] Txs tracked:   {snap.tx_count}")
+            logger.info(f"[OBS] Total spent:   ${snap.total_spent:.2f}")
+            logger.info(f"[OBS] Total revenue: ${snap.total_revenue:.2f}")
+            logger.info(f"[OBS] ROI:           {snap.roi_pct:.1f}%" if snap.roi_pct is not None else "[OBS] ROI: N/A")
+            logger.info(f"[OBS] Burn rate:     ${snap.burn_rate_per_hour:.2f}/hour")
+
         logger.info("=" * 70)
 
     async def run(self):
@@ -602,6 +652,7 @@ class PolymarketArbBot:
             logger.info(f"  Price threshold: ${self.settings.temporal_arb_price_threshold:.2f}")
             logger.info(f"  Order size:      {self.settings.temporal_arb_order_size:.0f}")
         logger.info(f"Risk limits:       daily_loss=${self.settings.max_daily_loss:.0f}, max_bet=${self.settings.max_single_bet:.0f}")
+        logger.info(f"Observability:     http://localhost:9400")
         if self.settings.dry_run:
             logger.info(f"Sim balance:       ${self.sim_balance:.2f}")
 
