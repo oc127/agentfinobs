@@ -50,10 +50,10 @@ dev = [
 agentfinobs = "agentfinobs.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/oc127/polymarket-arb-bot"
-Documentation = "https://github.com/oc127/polymarket-arb-bot#readme"
-Repository = "https://github.com/oc127/polymarket-arb-bot"
-Issues = "https://github.com/oc127/polymarket-arb-bot/issues"
+Homepage = "https://github.com/oc127/agentfinobs"
+Documentation = "https://github.com/oc127/agentfinobs#readme"
+Repository = "https://github.com/oc127/agentfinobs"
+Issues = "https://github.com/oc127/agentfinobs/issues"
 
 [tool.setuptools.packages.find]
 include = ["agentfinobs*"]
