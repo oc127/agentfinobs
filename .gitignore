@@ -1,18 +1,19 @@
-# Environment and secrets
-config/.env
-.env
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
 .venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
 
 # Logs and data
-logs/*.log
-data/*.json
-bot.pid
+*.log
+spend_log.jsonl
 
 # OS
 .DS_Store
