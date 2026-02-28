@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "agentfinobs"
 version = "0.1.0"
 description = "Agent Financial Observability — Datadog for Agent Payments"
-readme = "README_SDK.md"
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
@@ -50,10 +50,10 @@ dev = [
 agentfinobs = "agentfinobs.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/agentfinobs/agentfinobs"
-Documentation = "https://github.com/agentfinobs/agentfinobs#readme"
-Repository = "https://github.com/agentfinobs/agentfinobs"
-Issues = "https://github.com/agentfinobs/agentfinobs/issues"
+Homepage = "https://github.com/oc127/polymarket-arb-bot"
+Documentation = "https://github.com/oc127/polymarket-arb-bot#readme"
+Repository = "https://github.com/oc127/polymarket-arb-bot"
+Issues = "https://github.com/oc127/polymarket-arb-bot/issues"
 
 [tool.setuptools.packages.find]
 include = ["agentfinobs*"]
